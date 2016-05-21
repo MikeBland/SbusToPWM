@@ -221,6 +221,7 @@ static volatile unsigned char SwUartRXBitCount; //!< RX bit counter.
 uint8_t PulsesNeeded ;
 uint16_t LastPulsesStartTime ;
 uint8_t ChannelSwap ;
+uint8_t EightOnly ;
 
 struct t_pulses
 {
@@ -367,10 +368,27 @@ void setup()	// run once, when the sketch starts
 {
 	PORTB = 0 ;			// Outputs low
 	PORTC &= 0xF0 ;	// Outputs low
-	PORTD &= 0x01 ;	// Outputs low
+	PORTD &= 0x03 ;	// Outputs low
 	set_outputs() ;
 
 }
+
+#if F_CPU == 16000000L  // 16MHz clock                                                  
+#define DELAY150		2400
+#define DELAY20			 320
+#define DELAY40			 640
+#define DELAY60			 960
+#define TIME_LONG	 40000
+#define PULSE_SCALE		16
+#elif F_CPU == 8000000L   // 8MHz clock
+#define DELAY150		1200
+#define DELAY20			 160
+#define DELAY40			 320
+#define DELAY60			 480
+#define TIME_LONG	 20000
+#define PULSE_SCALE		 8
+#endif		
+
 
 void setPulseTimes( uint8_t Five2_8 )
 {
@@ -436,10 +454,10 @@ void setPulseTimes( uint8_t Five2_8 )
 	Pulses[0].start = 1 ;													// Mark the start
 	Pulses[4].start = 0 ;                         // Mark the end
   cli() ;
-	uint16_t time = TCNT1 + 2400 ;								// Start the pulses in 150 uS
+	uint16_t time = TCNT1 + DELAY150 ;								// Start the pulses in 150 uS
   sei() ;																							// Gives time for this code to finish
-	Pulses[0].nextTime = time + 320 ;							// Next pulse starts in 20 uS
-	Pulses[3].nextTime = time + m * 16 ;					// This pulse ends at this time
+	Pulses[0].nextTime = time + DELAY20 ;							// Next pulse starts in 20 uS
+	Pulses[3].nextTime = time + m * PULSE_SCALE ;					// This pulse ends at this time
 	
 	checkInput() ;
 	
@@ -459,8 +477,8 @@ void setPulseTimes( uint8_t Five2_8 )
 	Pulses[5].bit = Pulses[1].bit = Bits[j] ;     // Set the bit for this pulse
 	Pulses[1].start = 1 ;                         // Mark the start
 	Pulses[5].start = 0 ;                         // Mark the end
-	Pulses[1].nextTime = time + 640 ;             // Next pulse starts in another 20 uS
-	Pulses[4].nextTime = time + 320 + m * 16 ;    // This pulse ends at this time
+	Pulses[1].nextTime = time + DELAY40 ;             // Next pulse starts in another 20 uS
+	Pulses[4].nextTime = time + DELAY20 + m * PULSE_SCALE ;    // This pulse ends at this time
 	                                              
 	checkInput() ;
 	
@@ -480,8 +498,8 @@ void setPulseTimes( uint8_t Five2_8 )
 	Pulses[6].bit = Pulses[2].bit = Bits[j] ;
 	Pulses[2].start = 1 ;
 	Pulses[6].start = 0 ;
-	Pulses[2].nextTime = time + 960 ;
-	Pulses[5].nextTime = time + 640 + m * 16 ;
+	Pulses[2].nextTime = time + DELAY60 ;
+	Pulses[5].nextTime = time + DELAY40 + m * PULSE_SCALE ;
 
 	checkInput() ;
 
@@ -500,8 +518,8 @@ void setPulseTimes( uint8_t Five2_8 )
 	Pulses[7].bit = Pulses[3].bit = Bits[j] ;
 	Pulses[3].start = 1 ;
 	Pulses[7].start = 0 ;
-	Pulses[6].nextTime = time + 960 + m * 16 ;
-	Pulses[7].nextTime = time + 40000 ;			// Some time well ahead, shouldn't be used
+	Pulses[6].nextTime = time + DELAY60 + m * PULSE_SCALE ;
+	Pulses[7].nextTime = time + TIME_LONG ;			// Some time well ahead, shouldn't be used
 	cli() ;
 	OCR1A = time ;				// Set for first interrupt
   sei() ;
@@ -551,7 +569,7 @@ void readFailsafe()
 void eeprom_write_byte_cmp (uint8_t dat, uint16_t pointer_eeprom)
 {
   //see /home/thus/work/avr/avrsdk4/avr-libc-1.4.4/libc/misc/eeprom.S:98 143
-  while(EECR & (1<<EEWE)) /* make sure EEPROM is ready */
+  while(EECR & (1<<EEPE)) /* make sure EEPROM is ready */
   {
   }
   EEAR  = pointer_eeprom ;
@@ -562,8 +580,8 @@ void eeprom_write_byte_cmp (uint8_t dat, uint16_t pointer_eeprom)
   EEDR  = dat ;
   uint8_t flags=SREG ;
   cli() ;
-  EECR |= 1<<EEMWE ;
-  EECR |= 1<<EEWE ;
+  EECR |= 1<<EEMPE ;
+  EECR |= 1<<EEPE ;
   SREG = flags ;
 }
 
@@ -587,13 +605,22 @@ void setSerialMode( uint8_t mode )
 {
 	if ( mode == 0 )		// 57600
 	{
+#if F_CPU == 16000000L  // 16MHz clock                                                  
 		UBRR0L = 16 ;		// For 57600 baud, use 9 for 100000 baud
+#elif F_CPU == 8000000L   // 8MHz clock
+		UBRR0L = 8 ;		// For 57600 baud, use 9 for 100000 baud
+#endif		
 		UCSR0C = (1<<UCSZ00) | (1<<UCSZ01 ) ;
 	}
 	else
 	{
-		UBRR0L = 9 ;		// For 57600 baud, use 9 for 100000 baud
+#if F_CPU == 16000000L  // 16MHz clock                                                  
+		UBRR0L = 9 ;		// For 100000 baud
+#elif F_CPU == 8000000L   // 8MHz clock
+		UBRR0L = 4 ;		// For 100000 baud
+#endif		
 		UCSR0C = (1<<UCSZ00) | (1<<UCSZ01 ) | (1<<UPM01) ;
+		UCSR0B &= ~TXEN0 ;
 	}
 	SerialMode = mode ;
 }
@@ -603,7 +630,7 @@ static void initUart()
 	UBRR0H = 0 ;
 	setSerialMode( 1 ) ;
 	UCSR0A = 0 ;
-	PORTD |= 1 ;		// Enable pullup
+	PORTD |= 3 ;		// Enable pullup
 
 	UCSR0B = (1<<RXEN0) ;	// Enable receiver
 
@@ -647,6 +674,8 @@ void init()
 	PORTC &= ~0x20 ;
 #endif
 
+	DDRD &= ~0x02 ;
+	PORTD |= 0x02 ;
 
 	sei();
 }
@@ -699,6 +728,10 @@ int main()	// run over and over again
 	{
 		ChannelSwap = 1 ;
 	}
+	if ( ( PIND & 0x02 ) == 0 )		// Link on PD1
+	{
+		EightOnly = 1 ;
+	}
 
 	for(;;)
 	{
@@ -725,7 +758,11 @@ int main()	// run over and over again
 		x = TCNT1 ;
 		sei() ;
 
+#if F_CPU == 16000000L  // 16MHz clock                                                  
 		if ( ( x - Lastrcv ) > 8000 )
+#elif F_CPU == 8000000L   // 8MHz clock
+		if ( ( x - Lastrcv ) > 4000 )
+#endif		
 		{
 			if ( Sindex )
 			{
@@ -742,7 +779,13 @@ int main()	// run over and over again
 							if ( State == IDLE )
 							{
 								y = micros() ;
-								if ( ( y - LastPulsesStartTime ) > 17900 )
+								uint16_t rate = 17900 ;
+								if ( EightOnly )
+								{
+									rate = 8900 ;
+								}
+
+								if ( ( y - LastPulsesStartTime ) > rate )
 								{
 									LastPulsesStartTime = y - 21000 ;	// Will start the pulses
 								}
@@ -766,7 +809,14 @@ int main()	// run over and over again
 		{
 			if ( ( micros() - Timer ) > 3000 )	// Time for them
 			{
-				PulsesNeeded = NINE_TO_TWELVE ;
+				if ( EightOnly )
+				{
+					PulsesNeeded = END_PULSES ;
+				}
+				else
+				{
+					PulsesNeeded = NINE_TO_TWELVE ;
+				}
 				setPulseTimes( FIVE_TO_EIGHT ) ;	// Second 4 pulses
 				CLEAR_TIMER_INTERRUPT( ) ;				// Clear flag in case it is set
 				PulsesIndex = 0 ;									// Start here
@@ -853,8 +903,13 @@ uint32_t micros()
 
 	elapsed = time - lastTimerValue ;
 	elapsed += Correction ;
+#if F_CPU == 16000000L  // 16MHz clock                                                  
 	Correction = elapsed & 0x0F ;
 	elapsed >>= 4 ;
+#elif F_CPU == 8000000L   // 8MHz clock
+	Correction = elapsed & 0x07 ;
+	elapsed >>= 3 ;
+#endif		
 	
 	uint32_t ltime = TotalMicros ;
 	ltime += elapsed ;
@@ -865,24 +920,31 @@ uint32_t micros()
 	
 	elapsed += MillisPrecount;
 	millisToAdd = 0 ;
+#if F_CPU == 8000000L   // 8MHz clock
 	if ( elapsed  > 3999 )
 	{
 		millisToAdd = 4 ;
 		elapsed -= 4000 ;
 	}
+#endif		
+	if ( elapsed  > 3999 )
+	{
+		millisToAdd += 4 ;
+		elapsed -= 4000 ;
+	}
 	else if ( elapsed  > 2999 )
 	{
-		millisToAdd = 3 ;		
+		millisToAdd += 3 ;		
 		elapsed -= 3000 ;
 	}
 	else if ( elapsed  > 1999 )
 	{
-		millisToAdd = 2 ;
+		millisToAdd += 2 ;
 		elapsed -= 2000 ;
 	}
 	else if ( elapsed  > 999 )
 	{
-		millisToAdd = 1 ;
+		millisToAdd += 1 ;
 		elapsed -= 1000 ;
 	}
 	TotalMillis += millisToAdd ;
