@@ -12,5 +12,5 @@ If the Tx pin is connected to ground, via a 1K resistor, then it switches
 to 8 channel only mode, but with a servo update rate of 9mS.
 
 Connections:
-<img src="docs/wiring.jpg"/>
+<img src="docs/Wiring.jpg"/>
 
