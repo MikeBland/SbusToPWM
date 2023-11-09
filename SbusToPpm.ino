@@ -8,6 +8,8 @@
 
 //#define	DEBUG	1
 
+#define FAILSAFE_TIMEOUT_MS     500
+
 // Hardware pin mapping
 #define DDR_IO2			DDRD
 #define PORT_IO2		PORTD
@@ -722,7 +724,7 @@ int main()	// run over and over again
   setup() ;
 
 	enterFailsafe() ;			
-	LastSbusReceived = millis() - 600 ;	// Force failsafe at startup
+	LastSbusReceived = millis() - (FAILSAFE_TIMEOUT_MS + 100) ;	// Force failsafe at startup
 
 	if ( ( PINC & 0x20 ) == 0 )		// Link on AD5
 	{
@@ -864,7 +866,7 @@ int main()	// run over and over again
 			}
 		}
 
-		if ( ( millis() - LastSbusReceived ) > 500 )
+		if ( ( millis() - LastSbusReceived ) > FAILSAFE_TIMEOUT_MS )
 		{
 			enterFailsafe() ;
 		}
